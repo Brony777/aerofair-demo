@@ -1,117 +1,107 @@
-# Streamlit MVP for AeroFAIR Cloud - FAI-as-a-link demo (v2 - ReportLab)
+# Streamlit MVP – Carbon Footprint Calculator (AeroGreen Demo) + PDF + Upload + Komentarz
 """
-Switched from WeasyPrint -> ReportLab to avoid native Cairo/Pango dependencies
-on Streamlit Community Cloud.
-
-Run locally or on Streamlit Cloud:
-$ python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-$ pip install streamlit pandas reportlab
-$ streamlit run streamlit_app.py
-
-requirements.txt (Cloud):
-streamlit==1.34.0
-pandas==2.2.2
-reportlab==4.1.0
+Rozszerzona wersja demo aplikacji SaaS liczącej ślad węglowy:
+- PDF raport z FPDF
+- Możliwość uploadu pliku Excela z danymi wejściowymi
+- Pole komentarza ESG + autor
 """
 
-from __future__ import annotations
-
-import io
-import tempfile
-from datetime import datetime
-from typing import Optional
-
-import pandas as pd
 import streamlit as st
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle
+import pandas as pd
+from fpdf import FPDF
+import io
+from datetime import datetime
 
+st.set_page_config(page_title="Carbon Footprint Calculator", layout="centered")
+st.title("🌍 AeroGreen – Kalkulator śladu węglowego komponentu")
+st.markdown("Wprowadź dane lub załaduj plik Excela, aby obliczyć emisję CO₂ (kg/szt.)")
 
-def parse_cmm_file(uploaded_bytes: bytes, filename: str) -> Optional[pd.DataFrame]:
-    """Return DataFrame with (Characteristic, Nominal, Measured, Deviation, Status)."""
-    if filename.lower().endswith(".csv"):
-        df = pd.read_csv(io.BytesIO(uploaded_bytes))
-        return df
+# PDF generator
+class CO2PDF(FPDF):
+    def header(self):
+        self.set_font("Arial", "B", 14)
+        self.cell(0, 10, "Raport emisji CO₂ – AeroGreen", ln=True, align="C")
+        self.ln(10)
 
-    if filename.lower().endswith(".dfq"):
-        text = uploaded_bytes.decode("utf-8", errors="ignore")
-        rows = []
-        for line in text.splitlines():
-            if line.startswith("CC"):
-                parts = [p.strip() for p in line.split(",")]
-                if len(parts) >= 6:
-                    rows.append(
-                        {
-                            "Characteristic": parts[1],
-                            "Nominal": parts[2],
-                            "Measured": parts[3],
-                            "Deviation": parts[4],
-                            "Status": parts[7] if len(parts) > 7 else "?",
-                        }
-                    )
-        if not rows:
-            return None
-        return pd.DataFrame(rows)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Arial", "I", 8)
+        self.cell(0, 10, f"Wygenerowano: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 0, 0, "C")
 
-    return None
+    def add_result(self, data, total, komentarz, autor):
+        self.set_font("Arial", "", 12)
+        for k, v in data.items():
+            self.cell(0, 10, f"{k}: {v:.2f} kg CO₂", ln=True)
+        self.ln(5)
+        self.set_font("Arial", "B", 12)
+        self.cell(0, 10, f"Całkowita emisja: {total:.2f} kg CO₂/szt.", ln=True)
+        if komentarz:
+            self.set_font("Arial", "", 11)
+            self.multi_cell(0, 10, f"\nKomentarz: {komentarz}")
+        if autor:
+            self.set_font("Arial", "I", 10)
+            self.cell(0, 10, f"Obliczenia wykonał: {autor}", ln=True)
 
+# Upload lub ręczne dane
+uploaded = st.file_uploader("Lub załaduj plik Excela z danymi procesu", type="xlsx")
 
-def build_pdf(df: pd.DataFrame) -> bytes:
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=18)
-    elements = []
+if uploaded:
+    df = pd.read_excel(uploaded)
+    st.write("📋 Załadowane dane:", df)
+    row = df.iloc[0]
+    energy_kwh = row.get("energia_kWh", 0.0)
+    material_type = row.get("material", "Stal")
+    material_kg = row.get("material_kg", 0.0)
+    diesel_liters = row.get("diesel_l", 0.0)
+    transport_km = row.get("transport_km", 0.0)
+    transport_tons = row.get("transport_t", 0.0)
+else:
+    energy_kwh = st.number_input("Zużycie energii elektrycznej [kWh]", min_value=0.0, step=0.1)
+    material_type = st.selectbox("Materiał główny", ["Stal", "Aluminium"])
+    material_kg = st.number_input("Zużycie materiału [kg]", min_value=0.0, step=0.1)
+    diesel_liters = st.number_input("Zużycie paliwa (olej napędowy) [l]", min_value=0.0, step=0.1)
+    transport_km = st.number_input("Transport do klienta [km]", min_value=0.0, step=1.0)
+    transport_tons = st.number_input("Masa transportowana [t]", min_value=0.0, step=0.1)
 
-    styles = getSampleStyleSheet()
-    elements.append(Paragraph("First Article Inspection Report (Demo)", styles["Title"]))
-    elements.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
+komentarz = st.text_area("Komentarz do obliczeń (opcjonalny)")
+autor = st.text_input("Autor obliczeń (opcjonalnie)")
 
-    # Convert dataframe to list of lists
-    data = [df.columns.tolist()] + df.values.tolist()
-    table = Table(data, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-            ]
-        )
-    )
-    elements.append(table)
-    elements.append(Paragraph("Demo stamp - electronic signature not applied.", styles["Italic"]))
+if st.button("Oblicz ślad węglowy"):
+    EF = {
+        "power": 0.65,
+        "steel": 2.1,
+        "alu": 10.0,
+        "diesel": 2.67,
+        "truck": 0.12
+    }
+    em_power = energy_kwh * EF["power"]
+    em_material = material_kg * (EF["steel"] if material_type == "Stal" else EF["alu"])
+    em_fuel = diesel_liters * EF["diesel"]
+    em_transport = transport_km * transport_tons * EF["truck"]
 
-    doc.build(elements)
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    return pdf_bytes
+    total = em_power + em_material + em_fuel + em_transport
+    parts = {
+        "Energia": em_power,
+        f"Materiał ({material_type})": em_material,
+        "Paliwo": em_fuel,
+        "Transport": em_transport
+    }
 
+    st.success(f"Całkowita emisja CO₂: {total:.2f} kg / sztuka")
+    st.json(parts)
 
-st.set_page_config(page_title="AeroFAIR Cloud - FAI Demo", layout="centered")
-
-st.title("AeroFAIR Cloud - FAI Demo (ReportLab)")
-st.markdown("Upload plik CSV lub DFQ z CMM, a wygeneruję demo-raport FAI w PDF.")
-
-uploaded_file = st.file_uploader("Wybierz plik pomiarowy", type=["csv", "dfq"])
-
-if uploaded_file is not None:
-    bytes_data = uploaded_file.read()
-    df = parse_cmm_file(bytes_data, uploaded_file.name)
-
-    if df is None or df.empty:
-        st.error("Nie udało się odczytać danych - sprawdź format pliku.")
-        st.stop()
-
-    st.subheader("Podgląd pomiarów")
-    st.dataframe(df, use_container_width=True)
-
-    if st.button("Generuj FAI PDF"):
-        pdf_bytes = build_pdf(df)
-        st.success("Raport gotowy!")
+    if st.button("📄 Wygeneruj raport PDF"):
+        pdf = CO2PDF()
+        pdf.add_page()
+        pdf.add_result(parts, total, komentarz, autor)
+        pdf_buffer = io.BytesIO()
+        pdf.output(pdf_buffer)
+        pdf_buffer.seek(0)
         st.download_button(
-            label="Pobierz PDF", data=pdf_bytes, file_name="FAI_demo.pdf", mime="application/pdf"
+            label="📥 Pobierz raport CO₂ (PDF)",
+            data=pdf_buffer,
+            file_name="raport_sladu_weglowego.pdf",
+            mime="application/pdf"
         )
 else:
-    st.info("Najpierw załaduj plik...")
+    st.info("Wprowadź dane lub załaduj plik, aby rozpocząć obliczenia.")
