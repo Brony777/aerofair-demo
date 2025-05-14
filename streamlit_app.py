@@ -39,7 +39,7 @@ st.set_page_config(page_title="Mindful Eco Impact AI", page_icon="🌱", layout=
 st.title("🌱 Mindful Eco Impact AI")
 st.subheader("Monitorowanie i redukcja śladu węglowego Twojej organizacji")
 st.markdown("""
-Tutaj możesz analizować dane ESG, monitorować emisje CO₂ i generować raporty oraz certyfikaty.
+Tutaj możesz analizować dane ESG, monitorować emisje CO2 i generować raporty oraz certyfikaty.
 """)
 
 # ---------- Formularz ----------
@@ -93,13 +93,13 @@ if submitted:
     }
 
     st.success("✅ Obliczono ślad węglowy!")
-    st.metric("🌍 Całkowita emisja CO₂e", f"{co2_total:.2f} ton")
+    st.metric("🌍 Całkowita emisja CO2e", f"{co2_total:.2f} ton")
 
-    st.subheader("📈 Wykres emisji CO₂e per obszar")
+    st.subheader("📈 Wykres emisji CO2e per obszar")
     fig, ax = plt.subplots()
     ax.bar(esg_data.keys(), esg_data.values(), color="skyblue")
-    ax.set_title("Emisja CO₂e")
-    ax.set_ylabel("tCO₂e")
+    ax.set_title("Emisja CO2e")
+    ax.set_ylabel("tCO2e")
     plt.xticks(rotation=30)
     st.pyplot(fig)
 
@@ -115,11 +115,11 @@ if submitted:
         pdf.ln(5)
 
         for k, v in data.items():
-            pdf.cell(0, 10, f"{k}: {v:.3f} tCO₂e", ln=True)
+            pdf.cell(0, 10, f"{k}: {v:.3f} tCO2e", ln=True)
 
         pdf.ln(5)
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 10, f"Całkowita emisja: {total_emission:.3f} ton CO₂e", ln=True)
+        pdf.cell(0, 10, f"Całkowita emisja: {total_emission:.3f} ton CO2e", ln=True)
 
         if comment:
             pdf.ln(5)
@@ -137,14 +137,14 @@ if submitted:
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Helvetica", "B", 18)
-        pdf.cell(0, 15, "CERTYFIKAT EMISJI CO₂", ln=True, align="C")
+        pdf.cell(0, 15, "CERTYFIKAT EMISJI CO2", ln=True, align="C")
         pdf.ln(10)
 
         pdf.set_font("Helvetica", "", 13)
         pdf.multi_cell(0, 10,
             f"Potwierdzamy, że organizacja \"{org}\" przeprowadziła kalkulację śladu węglowego "
             f"w dniu {date_str} zgodnie z zakresem: {scope}.\n\n"
-            f"Wynik całkowitej emisji wyniósł: {total_emission:.2f} tCO₂e.")
+            f"Wynik całkowitej emisji wyniósł: {total_emission:.2f} tCO2e.")
 
         pdf.ln(20)
         pdf.cell(0, 10, "Wygenerowano przez system Mindful Eco Impact AI (wersja demo)", ln=True)
