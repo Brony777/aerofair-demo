@@ -107,9 +107,9 @@ if submitted:
     def generate_pdf(data, total_emission, comment, author):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
+        pdf.set_font("Helvetica", "B", 16)
         pdf.cell(0, 10, "Raport śladu węglowego", ln=True, align="C")
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font("Helvetica", "", 12)
         pdf.cell(0, 10, f"Data: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
         pdf.cell(0, 10, f"Autor: {author}", ln=True)
         pdf.ln(5)
@@ -118,12 +118,12 @@ if submitted:
             pdf.cell(0, 10, f"{k}: {v:.3f} tCO₂e", ln=True)
 
         pdf.ln(5)
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font("Helvetica", "B", 12)
         pdf.cell(0, 10, f"Całkowita emisja: {total_emission:.3f} ton CO₂e", ln=True)
 
         if comment:
             pdf.ln(5)
-            pdf.set_font("Arial", "", 11)
+            pdf.set_font("Helvetica", "", 11)
             pdf.multi_cell(0, 10, f"Komentarz: {comment}")
 
         buf = io.BytesIO()
@@ -136,11 +136,11 @@ if submitted:
     def generate_certificate(org, date_str, total_emission, scope):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", "B", 18)
+        pdf.set_font("Helvetica", "B", 18)
         pdf.cell(0, 15, "CERTYFIKAT EMISJI CO₂", ln=True, align="C")
         pdf.ln(10)
 
-        pdf.set_font("Arial", "", 13)
+        pdf.set_font("Helvetica", "", 13)
         pdf.multi_cell(0, 10,
             f"Potwierdzamy, że organizacja \"{org}\" przeprowadziła kalkulację śladu węglowego "
             f"w dniu {date_str} zgodnie z zakresem: {scope}.\n\n"
