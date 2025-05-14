@@ -1,120 +1,168 @@
-# Streamlit – Kalkulator śladu węglowego + PDF + Excel + Certyfikat
-
-import streamlit as st
-import pandas as pd
 from fpdf import FPDF
+import streamlit as st
+import datetime
 import io
-from datetime import datetime
+import json
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Carbon Footprint Calculator", layout="centered")
-st.title("🌍 AeroGreen – Kalkulator śladu węglowego komponentu")
+# ---------- Autoryzacja ----------
+def load_users():
+    with open("allowed_users.json") as f:
+        return json.load(f)
 
-uploaded = st.file_uploader("📁 Załaduj plik Excela z danymi procesu (opcjonalnie)", type="xlsx")
+def check_login(email, password, users):
+    for u in users:
+        if u["email"] == email and u["password"] == password:
+            return u
+    return None
 
-# Dane certyfikatu
-with st.expander("🧾 Dane do certyfikatu (opcjonalne)"):
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+if not st.session_state["user"]:
+    st.title("🔐 Logowanie do aplikacji")
+    email = st.text_input("Adres e-mail")
+    password = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj"):
+        users = load_users()
+        user = check_login(email, password, users)
+        if user:
+            st.session_state["user"] = user
+            st.success(f"Zalogowano jako {user['name']}")
+            st.rerun()
+        else:
+            st.error("Nieprawidłowy e-mail lub hasło")
+    st.stop()
+
+# ---------- Konfiguracja ----------
+st.set_page_config(page_title="Mindful Eco Impact AI", page_icon="🌱", layout="wide")
+st.title("🌱 Mindful Eco Impact AI")
+st.subheader("Monitorowanie i redukcja śladu węglowego Twojej organizacji")
+st.markdown("""
+Tutaj możesz analizować dane ESG, monitorować emisje CO₂ i generować raporty oraz certyfikaty.
+""")
+
+# ---------- Formularz ----------
+st.header("📊 Wprowadź dane ESG")
+
+with st.form("esg_form"):
+    st.subheader("🔌 Zużycie energii")
+    electricity_kwh = st.number_input("Energia elektryczna (kWh)", min_value=0.0)
+    heating_kwh = st.number_input("Energia cieplna (kWh)", min_value=0.0)
+
+    st.subheader("🚌 Transport")
+    vehicle_km = st.number_input("Samochód firmowy (km)", min_value=0.0)
+    flights_hours = st.number_input("Loty służbowe (h)", min_value=0.0)
+
+    st.subheader("📦 Odpady")
+    waste_kg = st.number_input("Odpady (kg)", min_value=0.0)
+
+    st.subheader("🧾 Dodatkowe informacje")
     org_name = st.text_input("Nazwa organizacji / produktu")
-    cert_date = st.date_input("Data kalkulacji", value=datetime.today())
-    cert_scope = st.selectbox("Zakres certyfikatu", ["Pełny", "Tylko Scope 1+2", "Tylko materiał"])
-    komentarz = st.text_area("Komentarz do obliczeń")
-    autor = st.text_input("Autor obliczeń")
+    cert_date = st.date_input("Data kalkulacji", value=datetime.date.today())
+    cert_scope = st.selectbox("Zakres certyfikatu", ["Scope 1+2", "Pełny (1-3)", "Tylko produkcja"])
+    comment = st.text_area("Komentarz ESG (opcjonalnie)")
+    author = st.text_input("Autor obliczeń")
 
-# Dane wejściowe ręcznie lub z pliku
-if uploaded:
-    df = pd.read_excel(uploaded)
-    st.write("📋 Załadowane dane:", df)
-    row = df.iloc[0]
-    energy_kwh = row.get("energia_kWh", 0.0)
-    material_type = row.get("material", "Stal")
-    material_kg = row.get("material_kg", 0.0)
-    diesel_liters = row.get("diesel_l", 0.0)
-    transport_km = row.get("transport_km", 0.0)
-    transport_tons = row.get("transport_t", 0.0)
-else:
-    energy_kwh = st.number_input("Zużycie energii elektrycznej [kWh]", min_value=0.0, step=0.1)
-    material_type = st.selectbox("Materiał główny", ["Stal", "Aluminium"])
-    material_kg = st.number_input("Zużycie materiału [kg]", min_value=0.0, step=0.1)
-    diesel_liters = st.number_input("Zużycie paliwa (olej napędowy) [l]", min_value=0.0, step=0.1)
-    transport_km = st.number_input("Transport do klienta [km]", min_value=0.0, step=1.0)
-    transport_tons = st.number_input("Masa transportowana [t]", min_value=0.0, step=0.1)
+    submitted = st.form_submit_button("Oblicz ślad węglowy")
 
-if st.button("Oblicz ślad węglowy"):
-    EF = {
-        "power": 0.65,
-        "steel": 2.1,
-        "alu": 10.0,
-        "diesel": 2.67,
-        "truck": 0.12
-    }
-    em_power = energy_kwh * EF["power"]
-    em_material = material_kg * (EF["steel"] if material_type == "Stal" else EF["alu"])
-    em_fuel = diesel_liters * EF["diesel"]
-    em_transport = transport_km * transport_tons * EF["truck"]
-
-    total = em_power + em_material + em_fuel + em_transport
-    parts = {
-        "Energia": em_power,
-        f"Materiał ({material_type})": em_material,
-        "Paliwo": em_fuel,
-        "Transport": em_transport
+# ---------- Obliczenia ----------
+if submitted:
+    CO2_FACTORS = {
+        "electricity": 0.0006,
+        "heating": 0.00025,
+        "vehicle": 0.00021,
+        "flight": 0.09,
+        "waste": 0.00045
     }
 
-    st.success(f"Całkowita emisja CO₂: {total:.2f} kg / sztuka")
-    st.json(parts)
+    co2_total = (
+        electricity_kwh * CO2_FACTORS["electricity"] +
+        heating_kwh * CO2_FACTORS["heating"] +
+        vehicle_km * CO2_FACTORS["vehicle"] +
+        flights_hours * CO2_FACTORS["flight"] +
+        waste_kg * CO2_FACTORS["waste"]
+    )
 
-    class CO2PDF(FPDF):
-        def header(self):
-            self.set_font("Arial", "B", 14)
-            self.cell(0, 10, "Raport emisji CO₂ – AeroGreen", ln=True, align="C")
-            self.ln(10)
+    esg_data = {
+        "Energia elektryczna": electricity_kwh * CO2_FACTORS["electricity"],
+        "Energia cieplna": heating_kwh * CO2_FACTORS["heating"],
+        "Samochód firmowy": vehicle_km * CO2_FACTORS["vehicle"],
+        "Loty służbowe": flights_hours * CO2_FACTORS["flight"],
+        "Odpady": waste_kg * CO2_FACTORS["waste"]
+    }
 
-        def footer(self):
-            self.set_y(-15)
-            self.set_font("Arial", "I", 8)
-            self.cell(0, 10, f"Wygenerowano: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 0, 0, "C")
+    st.success("✅ Obliczono ślad węglowy!")
+    st.metric("🌍 Całkowita emisja CO₂e", f"{co2_total:.2f} ton")
 
-        def add_result(self, data, total, komentarz, autor):
-            self.set_font("Arial", "", 12)
-            for k, v in data.items():
-                self.cell(0, 10, f"{k}: {v:.2f} kg CO₂", ln=True)
-            self.ln(5)
-            self.set_font("Arial", "B", 12)
-            self.cell(0, 10, f"Całkowita emisja: {total:.2f} kg CO₂/szt.", ln=True)
-            if komentarz:
-                self.set_font("Arial", "", 11)
-                self.multi_cell(0, 10, f"\nKomentarz: {komentarz}")
-            if autor:
-                self.set_font("Arial", "I", 10)
-                self.cell(0, 10, f"Obliczenia wykonał: {autor}", ln=True)
+    st.subheader("📈 Wykres emisji CO₂e per obszar")
+    fig, ax = plt.subplots()
+    ax.bar(esg_data.keys(), esg_data.values(), color="skyblue")
+    ax.set_title("Emisja CO₂e")
+    ax.set_ylabel("tCO₂e")
+    plt.xticks(rotation=30)
+    st.pyplot(fig)
 
-        def add_certificate(self, org, date, total, typ):
-            self.set_font("Arial", "B", 16)
-            self.cell(0, 10, "CERTYFIKAT EMISJI CO₂", ln=True, align="C")
-            self.ln(10)
-            self.set_font("Arial", "", 12)
-            self.multi_cell(0, 10, f"Potwierdza się, że dla jednostki produkcyjnej: {org or '—'}\nna dzień {date.strftime('%Y-%m-%d')}\nw zakresie: {typ}, wykonano kalkulację emisji zgodnie z uproszczoną metodyką AeroGreen.")
-            self.ln(5)
-            self.set_font("Arial", "B", 14)
-            self.cell(0, 10, f"Wynik: {total:.2f} kg CO₂ / sztuka", ln=True)
+    # ---------- Raport PDF ----------
+    def generate_pdf(data, total_emission, comment, author):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "Raport śladu węglowego", ln=True, align="C")
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 10, f"Data: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
+        pdf.cell(0, 10, f"Autor: {author}", ln=True)
+        pdf.ln(5)
 
-    pdf = CO2PDF()
-    pdf.add_page()
-    pdf.add_result(parts, total, komentarz, autor)
+        for k, v in data.items():
+            pdf.cell(0, 10, f"{k}: {v:.3f} tCO₂e", ln=True)
 
-    if st.button("📄 Pobierz raport PDF"):
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, f"Całkowita emisja: {total_emission:.3f} ton CO₂e", ln=True)
+
+        if comment:
+            pdf.ln(5)
+            pdf.set_font("Arial", "", 11)
+            pdf.multi_cell(0, 10, f"Komentarz: {comment}")
+
         buf = io.BytesIO()
-        pdf.output(buf)
+        pdf_bytes = pdf.output(dest="S").encode("latin1")
+        buf.write(pdf_bytes)
         buf.seek(0)
-        st.download_button("📥 Pobierz raport PDF", buf, file_name="raport_sladu_CO2.pdf", mime="application/pdf")
+        return buf
 
-    if st.button("📄 Wygeneruj certyfikat PDF"):
-        pdf_cert = CO2PDF()
-        pdf_cert.add_page()
-        pdf_cert.add_certificate(org_name, cert_date, total, cert_scope)
-        cert_buf = io.BytesIO()
-        pdf_cert.output(cert_buf)
-        cert_buf.seek(0)
-        st.download_button("📥 Pobierz certyfikat CO₂", cert_buf, file_name="certyfikat_CO2.pdf", mime="application/pdf")
+    # ---------- Certyfikat PDF ----------
+    def generate_certificate(org, date_str, total_emission, scope):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 18)
+        pdf.cell(0, 15, "CERTYFIKAT EMISJI CO₂", ln=True, align="C")
+        pdf.ln(10)
 
-else:
-    st.info("Wprowadź dane lub załaduj plik, aby rozpocząć obliczenia.")
+        pdf.set_font("Arial", "", 13)
+        pdf.multi_cell(0, 10,
+            f"Potwierdzamy, że organizacja \"{org}\" przeprowadziła kalkulację śladu węglowego "
+            f"w dniu {date_str} zgodnie z zakresem: {scope}.\n\n"
+            f"Wynik całkowitej emisji wyniósł: {total_emission:.2f} tCO₂e.")
+
+        pdf.ln(20)
+        pdf.cell(0, 10, "Wygenerowano przez system Mindful Eco Impact AI (wersja demo)", ln=True)
+
+        buf = io.BytesIO()
+        cert_bytes = pdf.output(dest="S").encode("latin1")
+        buf.write(cert_bytes)
+        buf.seek(0)
+        return buf
+
+    # ---------- Przyciski ----------
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📄 Pobierz raport PDF"):
+            buf = generate_pdf(esg_data, co2_total, comment, author)
+            st.download_button("📥 Pobierz raport", data=buf, file_name="raport_CO2.pdf", mime="application/pdf")
+
+    with col2:
+        if st.button("📄 Wygeneruj certyfikat PDF"):
+            cert_buf = generate_certificate(org_name, cert_date.strftime("%Y-%m-%d"), co2_total, cert_scope)
+            st.download_button("📥 Pobierz certyfikat", data=cert_buf, file_name="certyfikat_CO2.pdf", mime="application/pdf")
