@@ -1,10 +1,4 @@
-# Streamlit MVP – Carbon Footprint Calculator (AeroGreen Demo) + PDF + Upload + Komentarz
-"""
-Rozszerzona wersja demo aplikacji SaaS liczącej ślad węglowy:
-- PDF raport z FPDF
-- Możliwość uploadu pliku Excela z danymi wejściowymi
-- Pole komentarza ESG + autor
-"""
+# Streamlit – Kalkulator śladu węglowego + PDF + Excel + Certyfikat
 
 import streamlit as st
 import pandas as pd
@@ -14,37 +8,18 @@ from datetime import datetime
 
 st.set_page_config(page_title="Carbon Footprint Calculator", layout="centered")
 st.title("🌍 AeroGreen – Kalkulator śladu węglowego komponentu")
-st.markdown("Wprowadź dane lub załaduj plik Excela, aby obliczyć emisję CO₂ (kg/szt.)")
 
-# PDF generator
-class CO2PDF(FPDF):
-    def header(self):
-        self.set_font("Arial", "B", 14)
-        self.cell(0, 10, "Raport emisji CO₂ – AeroGreen", ln=True, align="C")
-        self.ln(10)
+uploaded = st.file_uploader("📁 Załaduj plik Excela z danymi procesu (opcjonalnie)", type="xlsx")
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Arial", "I", 8)
-        self.cell(0, 10, f"Wygenerowano: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 0, 0, "C")
+# Dane certyfikatu
+with st.expander("🧾 Dane do certyfikatu (opcjonalne)"):
+    org_name = st.text_input("Nazwa organizacji / produktu")
+    cert_date = st.date_input("Data kalkulacji", value=datetime.today())
+    cert_scope = st.selectbox("Zakres certyfikatu", ["Pełny", "Tylko Scope 1+2", "Tylko materiał"])
+    komentarz = st.text_area("Komentarz do obliczeń")
+    autor = st.text_input("Autor obliczeń")
 
-    def add_result(self, data, total, komentarz, autor):
-        self.set_font("Arial", "", 12)
-        for k, v in data.items():
-            self.cell(0, 10, f"{k}: {v:.2f} kg CO₂", ln=True)
-        self.ln(5)
-        self.set_font("Arial", "B", 12)
-        self.cell(0, 10, f"Całkowita emisja: {total:.2f} kg CO₂/szt.", ln=True)
-        if komentarz:
-            self.set_font("Arial", "", 11)
-            self.multi_cell(0, 10, f"\nKomentarz: {komentarz}")
-        if autor:
-            self.set_font("Arial", "I", 10)
-            self.cell(0, 10, f"Obliczenia wykonał: {autor}", ln=True)
-
-# Upload lub ręczne dane
-uploaded = st.file_uploader("Lub załaduj plik Excela z danymi procesu", type="xlsx")
-
+# Dane wejściowe ręcznie lub z pliku
 if uploaded:
     df = pd.read_excel(uploaded)
     st.write("📋 Załadowane dane:", df)
@@ -62,9 +37,6 @@ else:
     diesel_liters = st.number_input("Zużycie paliwa (olej napędowy) [l]", min_value=0.0, step=0.1)
     transport_km = st.number_input("Transport do klienta [km]", min_value=0.0, step=1.0)
     transport_tons = st.number_input("Masa transportowana [t]", min_value=0.0, step=0.1)
-
-komentarz = st.text_area("Komentarz do obliczeń (opcjonalny)")
-autor = st.text_input("Autor obliczeń (opcjonalnie)")
 
 if st.button("Oblicz ślad węglowy"):
     EF = {
@@ -90,18 +62,59 @@ if st.button("Oblicz ślad węglowy"):
     st.success(f"Całkowita emisja CO₂: {total:.2f} kg / sztuka")
     st.json(parts)
 
-    if st.button("📄 Wygeneruj raport PDF"):
-        pdf = CO2PDF()
-        pdf.add_page()
-        pdf.add_result(parts, total, komentarz, autor)
-        pdf_buffer = io.BytesIO()
-        pdf.output(pdf_buffer)
-        pdf_buffer.seek(0)
-        st.download_button(
-            label="📥 Pobierz raport CO₂ (PDF)",
-            data=pdf_buffer,
-            file_name="raport_sladu_weglowego.pdf",
-            mime="application/pdf"
-        )
+    class CO2PDF(FPDF):
+        def header(self):
+            self.set_font("Arial", "B", 14)
+            self.cell(0, 10, "Raport emisji CO₂ – AeroGreen", ln=True, align="C")
+            self.ln(10)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("Arial", "I", 8)
+            self.cell(0, 10, f"Wygenerowano: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 0, 0, "C")
+
+        def add_result(self, data, total, komentarz, autor):
+            self.set_font("Arial", "", 12)
+            for k, v in data.items():
+                self.cell(0, 10, f"{k}: {v:.2f} kg CO₂", ln=True)
+            self.ln(5)
+            self.set_font("Arial", "B", 12)
+            self.cell(0, 10, f"Całkowita emisja: {total:.2f} kg CO₂/szt.", ln=True)
+            if komentarz:
+                self.set_font("Arial", "", 11)
+                self.multi_cell(0, 10, f"\nKomentarz: {komentarz}")
+            if autor:
+                self.set_font("Arial", "I", 10)
+                self.cell(0, 10, f"Obliczenia wykonał: {autor}", ln=True)
+
+        def add_certificate(self, org, date, total, typ):
+            self.set_font("Arial", "B", 16)
+            self.cell(0, 10, "CERTYFIKAT EMISJI CO₂", ln=True, align="C")
+            self.ln(10)
+            self.set_font("Arial", "", 12)
+            self.multi_cell(0, 10, f"Potwierdza się, że dla jednostki produkcyjnej: {org or '—'}\nna dzień {date.strftime('%Y-%m-%d')}\nw zakresie: {typ}, wykonano kalkulację emisji zgodnie z uproszczoną metodyką AeroGreen.")
+            self.ln(5)
+            self.set_font("Arial", "B", 14)
+            self.cell(0, 10, f"Wynik: {total:.2f} kg CO₂ / sztuka", ln=True)
+
+    pdf = CO2PDF()
+    pdf.add_page()
+    pdf.add_result(parts, total, komentarz, autor)
+
+    if st.button("📄 Pobierz raport PDF"):
+        buf = io.BytesIO()
+        pdf.output(buf)
+        buf.seek(0)
+        st.download_button("📥 Pobierz raport PDF", buf, file_name="raport_sladu_CO2.pdf", mime="application/pdf")
+
+    if st.button("📄 Wygeneruj certyfikat PDF"):
+        pdf_cert = CO2PDF()
+        pdf_cert.add_page()
+        pdf_cert.add_certificate(org_name, cert_date, total, cert_scope)
+        cert_buf = io.BytesIO()
+        pdf_cert.output(cert_buf)
+        cert_buf.seek(0)
+        st.download_button("📥 Pobierz certyfikat CO₂", cert_buf, file_name="certyfikat_CO2.pdf", mime="application/pdf")
+
 else:
     st.info("Wprowadź dane lub załaduj plik, aby rozpocząć obliczenia.")
