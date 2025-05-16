@@ -6,7 +6,7 @@ from fpdf import FPDF
 
 # ---------- Autoryzacja ----------
 def load_users():
-    with open("users.json") as f:
+    with open("allowed_users.json") as f:
         return json.load(f)
 
 def check_login(email, password, users):
