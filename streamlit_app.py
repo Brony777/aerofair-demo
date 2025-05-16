@@ -2,11 +2,13 @@ import streamlit as st
 import datetime
 import io
 import json
+import pandas as pd
 from fpdf import FPDF
+from pathlib import Path
 
 # ---------- Autoryzacja ----------
 def load_users():
-    with open("allowed_users.json") as f:
+    with open("users.json") as f:
         return json.load(f)
 
 def check_login(email, password, users):
@@ -17,6 +19,8 @@ def check_login(email, password, users):
 
 if "user" not in st.session_state:
     st.session_state["user"] = None
+if "audit_df" not in st.session_state:
+    st.session_state["audit_df"] = pd.DataFrame()
 
 if not st.session_state["user"]:
     st.title("🔐 Logowanie do QADesk")
@@ -33,12 +37,10 @@ if not st.session_state["user"]:
             st.error("Nieprawidłowy e-mail lub hasło")
     st.stop()
 
-# ---------- Aplikacja główna ----------
+# ---------- Konfiguracja ----------
 st.set_page_config(page_title="QADesk – Audyty ISO", page_icon="✅", layout="wide")
 st.title("✅ QADesk – Audyty ISO 9001")
 st.caption(f"Zalogowany jako: {st.session_state['user']['name']} ({st.session_state['user']['email']})")
-
-st.subheader("📋 Formularz audytu ISO 9001")
 
 questions = [
     "Czy są zdefiniowane role i odpowiedzialności?",
@@ -48,12 +50,18 @@ questions = [
     "Czy dostępne są zapisy z poprzednich audytów?"
 ]
 
-results = []
-with st.form("audit_form"):
-    auditor = st.text_input("Imię i nazwisko audytora")
-    date = st.date_input("Data audytu", value=datetime.date.today())
+audit_file = Path("audits.csv")
 
+# ---------- Formularz audytu ----------
+st.subheader("📝 Nowy audyt")
+
+with st.form("audit_form"):
+    auditor = st.text_input("Audytor")
+    date = st.date_input("Data audytu", value=datetime.date.today())
+    version = st.text_input("Wersja dokumentacji (np. ISO_2023_v2)")
     st.markdown("---")
+
+    results = []
     for i, q in enumerate(questions, start=1):
         col1, col2 = st.columns([3, 2])
         with col1:
@@ -62,32 +70,43 @@ with st.form("audit_form"):
             result = st.radio(f"Wynik {i}", ["Tak", "Nie", "N/A"], key=f"q{i}")
             comment = st.text_input(f"Komentarz {i}", key=f"c{i}")
         results.append((q, result, comment))
-    submitted = st.form_submit_button("✅ Zakończ audyt i generuj PDF")
+
+    submitted = st.form_submit_button("✅ Zakończ audyt i zapisz")
 
 if submitted:
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "Raport audytu jakości – ISO 9001", ln=True, align="C")
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 10, f"Audytor: {auditor}", ln=True)
-    pdf.cell(0, 10, f"Data: {date.strftime('%Y-%m-%d')}", ln=True)
-    pdf.cell(0, 10, f"Użytkownik: {st.session_state['user']['email']}", ln=True)
-    pdf.ln(5)
+    records = []
+    for q, res, com in results:
+        records.append({
+            "auditor": auditor,
+            "date": date.strftime("%Y-%m-%d"),
+            "user": st.session_state["user"]["email"],
+            "question": q,
+            "result": res,
+            "comment": com,
+            "version": version
+        })
+    new_df = pd.DataFrame(records)
+    if audit_file.exists():
+        existing = pd.read_csv(audit_file)
+        full_df = pd.concat([existing, new_df], ignore_index=True)
+    else:
+        full_df = new_df
+    full_df.to_csv(audit_file, index=False)
+    st.success("✅ Audyt zapisany!")
 
-    for i, (q, res, com) in enumerate(results, start=1):
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.multi_cell(0, 8, f"{i}. {q}")
-        pdf.set_font("Helvetica", "", 12)
-        pdf.cell(0, 8, f"Wynik: {res}", ln=True)
-        if com:
-            pdf.multi_cell(0, 8, f"Komentarz: {com}")
-        pdf.ln(2)
+# ---------- Dashboard ----------
+st.subheader("📊 Historia i harmonogram audytów")
 
-    pdf.ln(10)
-    pdf.cell(0, 10, "Wygenerowano przez QADesk", ln=True)
+if audit_file.exists():
+    df = pd.read_csv(audit_file)
+    st.dataframe(df)
+    st.download_button("📥 Eksportuj do CSV", df.to_csv(index=False).encode("utf-8"), "audits_export.csv")
 
-    pdf_bytes = pdf.output(dest="S").encode("latin1")
-    pdf_buffer = io.BytesIO(pdf_bytes)
-    st.download_button("📥 Pobierz raport PDF", data=pdf_buffer, file_name="raport_audytu.pdf", mime="application/pdf")
+    st.markdown("### ✏️ Edytuj istniejący wpis")
+    selected_row = st.number_input("Nr rekordu do edycji (0 = pierwszy)", min_value=0, max_value=len(df)-1, step=1)
+    if st.button("Zastosuj zmianę (ustaw wynik 'Tak')"):
+        df.at[selected_row, "result"] = "Tak"
+        df.to_csv(audit_file, index=False)
+        st.success("Wynik zaktualizowany!")
+else:
+    st.info("Brak danych audytowych.")
