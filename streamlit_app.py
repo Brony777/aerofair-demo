@@ -1,13 +1,12 @@
-from fpdf import FPDF
 import streamlit as st
 import datetime
 import io
 import json
-import matplotlib.pyplot as plt
+from fpdf import FPDF
 
 # ---------- Autoryzacja ----------
 def load_users():
-    with open("allowed_users.json") as f:
+    with open("users.json") as f:
         return json.load(f)
 
 def check_login(email, password, users):
@@ -20,7 +19,7 @@ if "user" not in st.session_state:
     st.session_state["user"] = None
 
 if not st.session_state["user"]:
-    st.title("🔐 Logowanie do aplikacji")
+    st.title("🔐 Logowanie do QADesk")
     email = st.text_input("Adres e-mail")
     password = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
@@ -34,135 +33,61 @@ if not st.session_state["user"]:
             st.error("Nieprawidłowy e-mail lub hasło")
     st.stop()
 
-# ---------- Konfiguracja ----------
-st.set_page_config(page_title="Mindful Eco Impact AI", page_icon="🌱", layout="wide")
-st.title("🌱 Mindful Eco Impact AI")
-st.subheader("Monitorowanie i redukcja śladu węglowego Twojej organizacji")
-st.markdown("""
-Tutaj możesz analizować dane ESG, monitorować emisje CO2 i generować raporty oraz certyfikaty.
-""")
+# ---------- Aplikacja główna ----------
+st.set_page_config(page_title="QADesk – Audyty ISO", page_icon="✅", layout="wide")
+st.title("✅ QADesk – Audyty ISO 9001")
+st.caption(f"Zalogowany jako: {st.session_state['user']['name']} ({st.session_state['user']['email']})")
 
-# ---------- Formularz ----------
-st.header("📊 Wprowadź dane ESG")
+st.subheader("📋 Formularz audytu ISO 9001")
 
-with st.form("esg_form"):
-    st.subheader("🔌 Zużycie energii")
-    electricity_kwh = st.number_input("Energia elektryczna (kWh)", min_value=0.0)
-    heating_kwh = st.number_input("Energia cieplna (kWh)", min_value=0.0)
+questions = [
+    "Czy są zdefiniowane role i odpowiedzialności?",
+    "Czy istnieje procedura oceny dostawców?",
+    "Czy dokumentacja jest aktualna i podpisana?",
+    "Czy przeprowadzono przegląd zarządzania?",
+    "Czy dostępne są zapisy z poprzednich audytów?"
+]
 
-    st.subheader("🚌 Transport")
-    vehicle_km = st.number_input("Samochód firmowy (km)", min_value=0.0)
-    flights_hours = st.number_input("Loty służbowe (h)", min_value=0.0)
+results = []
+with st.form("audit_form"):
+    auditor = st.text_input("Imię i nazwisko audytora")
+    date = st.date_input("Data audytu", value=datetime.date.today())
 
-    st.subheader("📦 Odpady")
-    waste_kg = st.number_input("Odpady (kg)", min_value=0.0)
+    st.markdown("---")
+    for i, q in enumerate(questions, start=1):
+        col1, col2 = st.columns([3, 2])
+        with col1:
+            st.markdown(f"**{i}. {q}**")
+        with col2:
+            result = st.radio(f"Wynik {i}", ["Tak", "Nie", "N/A"], key=f"q{i}")
+            comment = st.text_input(f"Komentarz {i}", key=f"c{i}")
+        results.append((q, result, comment))
+    submitted = st.form_submit_button("✅ Zakończ audyt i generuj PDF")
 
-    st.subheader("🧾 Dodatkowe informacje")
-    org_name = st.text_input("Nazwa organizacji / produktu")
-    cert_date = st.date_input("Data kalkulacji", value=datetime.date.today())
-    cert_scope = st.selectbox("Zakres certyfikatu", ["Scope 1+2", "Pełny (1-3)", "Tylko produkcja"])
-    comment = st.text_area("Komentarz ESG (opcjonalnie)")
-    author = st.text_input("Autor obliczeń")
-
-    submitted = st.form_submit_button("Oblicz ślad węglowy")
-
-# ---------- Obliczenia ----------
 if submitted:
-    CO2_FACTORS = {
-        "electricity": 0.0006,
-        "heating": 0.00025,
-        "vehicle": 0.00021,
-        "flight": 0.09,
-        "waste": 0.00045
-    }
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "Raport audytu jakości – ISO 9001", ln=True, align="C")
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 10, f"Audytor: {auditor}", ln=True)
+    pdf.cell(0, 10, f"Data: {date.strftime('%Y-%m-%d')}", ln=True)
+    pdf.cell(0, 10, f"Użytkownik: {st.session_state['user']['email']}", ln=True)
+    pdf.ln(5)
 
-    co2_total = (
-        electricity_kwh * CO2_FACTORS["electricity"] +
-        heating_kwh * CO2_FACTORS["heating"] +
-        vehicle_km * CO2_FACTORS["vehicle"] +
-        flights_hours * CO2_FACTORS["flight"] +
-        waste_kg * CO2_FACTORS["waste"]
-    )
-
-    esg_data = {
-        "Energia elektryczna": electricity_kwh * CO2_FACTORS["electricity"],
-        "Energia cieplna": heating_kwh * CO2_FACTORS["heating"],
-        "Samochód firmowy": vehicle_km * CO2_FACTORS["vehicle"],
-        "Loty służbowe": flights_hours * CO2_FACTORS["flight"],
-        "Odpady": waste_kg * CO2_FACTORS["waste"]
-    }
-
-    st.success("✅ Obliczono ślad węglowy!")
-    st.metric("🌍 Całkowita emisja CO2e", f"{co2_total:.2f} ton")
-
-    st.subheader("📈 Wykres emisji CO2e per obszar")
-    fig, ax = plt.subplots()
-    ax.bar(esg_data.keys(), esg_data.values(), color="skyblue")
-    ax.set_title("Emisja CO2e")
-    ax.set_ylabel("tCO2e")
-    plt.xticks(rotation=30)
-    st.pyplot(fig)
-
-    # ---------- Raport PDF ----------
-    def generate_pdf(data, total_emission, comment, author):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "Raport śladu węglowego", ln=True, align="C")
-        pdf.set_font("Helvetica", "", 12)
-        pdf.cell(0, 10, f"Data: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
-        pdf.cell(0, 10, f"Autor: {author}", ln=True)
-        pdf.ln(5)
-
-        for k, v in data.items():
-            pdf.cell(0, 10, f"{k}: {v:.3f} tCO2e", ln=True)
-
-        pdf.ln(5)
+    for i, (q, res, com) in enumerate(results, start=1):
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 10, f"Całkowita emisja: {total_emission:.3f} ton CO2e", ln=True)
+        pdf.multi_cell(0, 8, f"{i}. {q}")
+        pdf.set_font("Helvetica", "", 12)
+        pdf.cell(0, 8, f"Wynik: {res}", ln=True)
+        if com:
+            pdf.multi_cell(0, 8, f"Komentarz: {com}")
+        pdf.ln(2)
 
-        if comment:
-            pdf.ln(5)
-            pdf.set_font("Helvetica", "", 11)
-            pdf.multi_cell(0, 10, f"Komentarz: {comment}")
+    pdf.ln(10)
+    pdf.cell(0, 10, "Wygenerowano przez QADesk", ln=True)
 
-        buf = io.BytesIO()
-        pdf_bytes = pdf.output(dest="S").encode("latin1")
-        buf.write(pdf_bytes)
-        buf.seek(0)
-        return buf
-
-    # ---------- Certyfikat PDF ----------
-    def generate_certificate(org, date_str, total_emission, scope):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", "B", 18)
-        pdf.cell(0, 15, "CERTYFIKAT EMISJI CO2", ln=True, align="C")
-        pdf.ln(10)
-
-        pdf.set_font("Helvetica", "", 13)
-        pdf.multi_cell(0, 10,
-            f"Potwierdzamy, że organizacja \"{org}\" przeprowadziła kalkulację śladu węglowego "
-            f"w dniu {date_str} zgodnie z zakresem: {scope}.\n\n"
-            f"Wynik całkowitej emisji wyniósł: {total_emission:.2f} tCO2e.")
-
-        pdf.ln(20)
-        pdf.cell(0, 10, "Wygenerowano przez system Mindful Eco Impact AI (wersja demo)", ln=True)
-
-        buf = io.BytesIO()
-        cert_bytes = pdf.output(dest="S").encode("latin1")
-        buf.write(cert_bytes)
-        buf.seek(0)
-        return buf
-
-    # ---------- Przyciski ----------
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📄 Pobierz raport PDF"):
-            buf = generate_pdf(esg_data, co2_total, comment, author)
-            st.download_button("📥 Pobierz raport", data=buf, file_name="raport_CO2.pdf", mime="application/pdf")
-
-    with col2:
-        if st.button("📄 Wygeneruj certyfikat PDF"):
-            cert_buf = generate_certificate(org_name, cert_date.strftime("%Y-%m-%d"), co2_total, cert_scope)
-            st.download_button("📥 Pobierz certyfikat", data=cert_buf, file_name="certyfikat_CO2.pdf", mime="application/pdf")
+    pdf_bytes = pdf.output(dest="S").encode("latin1")
+    pdf_buffer = io.BytesIO(pdf_bytes)
+    st.download_button("📥 Pobierz raport PDF", data=pdf_buffer, file_name="raport_audytu.pdf", mime="application/pdf")
