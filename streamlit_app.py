@@ -42,9 +42,9 @@ if not st.session_state["user"]:
     st.markdown("""
     ---
     ❓ Nie masz konta?  
-    👉  Wyślij wiadomość, aby otrzymać dane logowania.<br><br>
-        ✉️ W tytule e-maila wpisz: <strong>QADEMO</strong><br>
-        Na przykład: <em>"QADEMO - prośba o dostęp do QADesk"</em>
+    👉  Wyślij wiadomość, aby otrzymać dane logowania.
+        ✉️ W tytule e-maila wpisz: QADEMO
+        Na przykład: "QADEMO - prośba o dostęp do QADesk"
     """)
     st.stop()
 
