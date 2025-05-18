@@ -17,23 +17,33 @@ def check_login(email, password, users):
             return u
     return None
 
-# Inicjalizacja sesji
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "audit_df" not in st.session_state:
     st.session_state["audit_df"] = pd.DataFrame()
 
-# ---------- Zablokuj dostęp, jeśli brak konta ----------
+# ---------- Logowanie + komunikat ----------
 if not st.session_state["user"]:
-    st.set_page_config(page_title="QADesk – dostęp prywatny", layout="centered")
-    st.title("🔐 QADesk – dostęp tylko na zaproszenie")
+    st.set_page_config(page_title="QADesk – Logowanie", layout="centered")
+    st.title("🔐 Logowanie do QADesk")
+
+    email = st.text_input("Adres e-mail")
+    password = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj"):
+        users = load_users()
+        user = check_login(email, password, users)
+        if user:
+            st.session_state["user"] = user
+            st.success(f"Zalogowano jako {user['name']}")
+            st.rerun()
+        else:
+            st.error("Nieprawidłowy e-mail lub hasło")
+
     st.markdown("""
-Aby uzyskać dostęp do aplikacji QADesk, wyślij prośbę o konto:
-
-📧 **[kontakt@example.com](mailto:kontakt@example.com)**
-
-Na podstawie zgłoszenia otrzymasz dane logowania.
-""")
+    ---
+    ❓ Nie masz konta?  
+    👉 Wyślij wiadomość na **[kontakt@example.com](mailto:kontakt@example.com)**, aby otrzymać dane logowania.
+    """)
     st.stop()
 
 # ---------- Konfiguracja ----------
