@@ -97,12 +97,16 @@ if not components:
 selected_component = st.selectbox("📦 Wybierz komponent do audytu", components)
 
 questions = [
-    "Czy są zdefiniowane role i odpowiedzialności?",
-    "Czy istnieje procedura oceny dostawców?",
-    "Czy dokumentacja jest aktualna i podpisana?",
-    "Czy przeprowadzono przegląd zarządzania?",
-    "Czy dostępne są zapisy z poprzednich audytów?"
+    "Czy określono role, obowiązki i uprawnienia związane z jakością w procesach lotniczych?",
+    "Czy dostawcy są zatwierdzeni zgodnie z wymaganiami branży lotniczej (np. wg ASL)?",
+    "Czy dokumentacja techniczna i zapisy są nadzorowane i zaktualizowane zgodnie z wymaganiami klienta?",
+    "Czy przeprowadzono okresowy przegląd zarządzania z uwzględnieniem ryzyk dla bezpieczeństwa lotniczego?",
+    "Czy utrzymywana jest identyfikowalność części i materiałów na wszystkich etapach produkcji?",
+    "Czy wdrożono działania zapobiegawcze dla niezgodności o krytycznym znaczeniu?",
+    "Czy dane z poprzednich audytów i incydentów są wykorzystywane do doskonalenia systemu?",
+    "Czy przechowywane są dowody spełnienia wymagań klientów i nadzoru nad zmianami projektowymi?"
 ]
+
 
 audit_file = Path("audits.csv")
 
