@@ -3,7 +3,6 @@ import datetime
 import io
 import json
 import pandas as pd
-from fpdf import FPDF
 from pathlib import Path
 
 # ---------- Autoryzacja ----------
@@ -19,14 +18,10 @@ def check_login(email, password, users):
 
 if "user" not in st.session_state:
     st.session_state["user"] = None
-if "audit_df" not in st.session_state:
-    st.session_state["audit_df"] = pd.DataFrame()
 
-# ---------- Logowanie + komunikat ----------
 if not st.session_state["user"]:
     st.set_page_config(page_title="QADesk – Logowanie", layout="centered")
     st.title("🔐 Logowanie do QADesk")
-
     email = st.text_input("Adres e-mail")
     password = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
@@ -38,20 +33,68 @@ if not st.session_state["user"]:
             st.rerun()
         else:
             st.error("Nieprawidłowy e-mail lub hasło")
-
-    st.markdown("""
-    ---
-    ❓ Nie masz konta?  
-    👉  Wyślij wiadomość, aby otrzymać dane logowania.
-        ✉️ W tytule e-maila wpisz: QADEMO
-        Na przykład: "QADEMO - prośba o dostęp do QADesk"
-    """)
     st.stop()
 
 # ---------- Konfiguracja ----------
 st.set_page_config(page_title="QADesk – Audyty ISO", page_icon="✅", layout="wide")
 st.title("✅ QADesk – Audyty ISO 9001")
 st.caption(f"Zalogowany jako: {st.session_state['user']['name']} ({st.session_state['user']['email']})")
+
+# ---------- Komponenty ----------
+components_file = Path("components.json")
+
+def load_components():
+    if components_file.exists():
+        with open(components_file) as f:
+            return json.load(f)
+    return []
+
+def save_components(components):
+    with open(components_file, "w") as f:
+        json.dump(components, f, indent=2)
+
+components = load_components()
+
+st.subheader("🧩 Zarządzanie komponentami")
+new_comp = st.text_input("Dodaj nowy komponent")
+if st.button("➕ Dodaj komponent") and new_comp:
+    if new_comp not in components:
+        components.append(new_comp)
+        save_components(components)
+        st.success(f"Dodano: {new_comp}")
+        st.rerun()
+    else:
+        st.warning("Ten komponent już istnieje.")
+
+if components:
+    st.markdown("### ✏️ Edytuj / usuń komponenty")
+    selected = st.selectbox("Wybierz komponent do edycji lub usunięcia", components)
+    new_name = st.text_input("Zmień nazwę", value=selected)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💾 Zapisz zmiany"):
+            idx = components.index(selected)
+            components[idx] = new_name
+            save_components(components)
+            st.success("Zmieniono nazwę komponentu.")
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Usuń komponent"):
+            components.remove(selected)
+            save_components(components)
+            st.success("Usunięto komponent.")
+            st.rerun()
+else:
+    st.info("Brak zdefiniowanych komponentów. Dodaj przynajmniej jeden.")
+
+# ---------- Formularz audytu ----------
+st.subheader("📝 Nowy audyt ISO 9001")
+
+if not components:
+    st.warning("Przed audytem musisz dodać komponent.")
+    st.stop()
+
+selected_component = st.selectbox("📦 Wybierz komponent do audytu", components)
 
 questions = [
     "Czy są zdefiniowane role i odpowiedzialności?",
@@ -63,15 +106,12 @@ questions = [
 
 audit_file = Path("audits.csv")
 
-# ---------- Formularz audytu ----------
-st.subheader("📝 Nowy audyt")
-
 with st.form("audit_form"):
     auditor = st.text_input("Audytor")
     date = st.date_input("Data audytu", value=datetime.date.today())
     version = st.text_input("Wersja dokumentacji (np. ISO_2023_v2)")
-    st.markdown("---")
 
+    st.markdown("---")
     results = []
     for i, q in enumerate(questions, start=1):
         col1, col2 = st.columns([3, 2])
@@ -91,6 +131,7 @@ if submitted:
             "auditor": auditor,
             "date": date.strftime("%Y-%m-%d"),
             "user": st.session_state["user"]["email"],
+            "component": selected_component,
             "question": q,
             "result": res,
             "comment": com,
@@ -104,20 +145,3 @@ if submitted:
         full_df = new_df
     full_df.to_csv(audit_file, index=False)
     st.success("✅ Audyt zapisany!")
-
-# ---------- Dashboard ----------
-st.subheader("📊 Historia i harmonogram audytów")
-
-if audit_file.exists():
-    df = pd.read_csv(audit_file)
-    st.dataframe(df)
-    st.download_button("📥 Eksportuj do CSV", df.to_csv(index=False).encode("utf-8"), "audits_export.csv")
-
-    st.markdown("### ✏️ Edytuj istniejący wpis")
-    selected_row = st.number_input("Nr rekordu do edycji (0 = pierwszy)", min_value=0, max_value=len(df)-1, step=1)
-    if st.button("Zastosuj zmianę (ustaw wynik 'Tak')"):
-        df.at[selected_row, "result"] = "Tak"
-        df.to_csv(audit_file, index=False)
-        st.success("Wynik zaktualizowany!")
-else:
-    st.info("Brak danych audytowych.")
