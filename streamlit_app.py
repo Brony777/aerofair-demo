@@ -4,6 +4,7 @@ import io
 import json
 import pandas as pd
 from pathlib import Path
+from fpdf import FPDF
 
 # ---------- Autoryzacja ----------
 def load_users():
@@ -22,6 +23,7 @@ if "user" not in st.session_state:
 if not st.session_state["user"]:
     st.set_page_config(page_title="QADesk – Logowanie", layout="centered")
     st.title("🔐 Logowanie do QADesk")
+
     email = st.text_input("Adres e-mail")
     password = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
@@ -33,6 +35,13 @@ if not st.session_state["user"]:
             st.rerun()
         else:
             st.error("Nieprawidłowy e-mail lub hasło")
+
+    st.markdown("""
+    ---
+    ❓ Nie masz konta?  
+    👉  Wyślij wiadomość, aby otrzymać dane logowania.  
+    ✉️ Tytuł e-maila: **QADEMO**
+    """)
     st.stop()
 
 # ---------- Konfiguracja ----------
@@ -40,112 +49,120 @@ st.set_page_config(page_title="QADesk – Audyty ISO", page_icon="✅", layout="
 st.title("✅ QADesk – Audyty ISO 9001")
 st.caption(f"Zalogowany jako: {st.session_state['user']['name']} ({st.session_state['user']['email']})")
 
-# ---------- Komponenty ----------
-components_file = Path("components.json")
+component_file = Path("components.json")
+audit_file = Path("audits.csv")
 
+# ---------- Nawigacja ----------
+menu = st.sidebar.radio("📁 Wybierz widok", ["➕ Nowy audyt", "🧩 Zarządzanie komponentami", "📂 Historia audytów"])
+
+# ---------- Komponenty ----------
 def load_components():
-    if components_file.exists():
-        with open(components_file) as f:
-            return json.load(f)
+    if component_file.exists():
+        return json.loads(component_file.read_text())
     return []
 
 def save_components(components):
-    with open(components_file, "w") as f:
-        json.dump(components, f, indent=2)
+    component_file.write_text(json.dumps(components, indent=2, ensure_ascii=False))
 
 components = load_components()
 
-st.subheader("🧩 Zarządzanie komponentami")
-new_comp = st.text_input("Dodaj nowy komponent")
-if st.button("➕ Dodaj komponent") and new_comp:
-    if new_comp not in components:
-        components.append(new_comp)
-        save_components(components)
-        st.success(f"Dodano: {new_comp}")
-        st.rerun()
-    else:
-        st.warning("Ten komponent już istnieje.")
+# ---------- Widok: Dodawanie audytu ----------
+if menu == "➕ Nowy audyt":
+    st.subheader("📝 Nowy audyt ISO 9001")
 
-if components:
-    st.markdown("### ✏️ Edytuj / usuń komponenty")
-    selected = st.selectbox("Wybierz komponent do edycji lub usunięcia", components)
-    new_name = st.text_input("Zmień nazwę", value=selected)
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("💾 Zapisz zmiany"):
-            idx = components.index(selected)
-            components[idx] = new_name
-            save_components(components)
-            st.success("Zmieniono nazwę komponentu.")
-            st.rerun()
-    with col2:
-        if st.button("🗑️ Usuń komponent"):
-            components.remove(selected)
-            save_components(components)
-            st.success("Usunięto komponent.")
-            st.rerun()
-else:
-    st.info("Brak zdefiniowanych komponentów. Dodaj przynajmniej jeden.")
+    if not components:
+        st.warning("⚠️ Najpierw dodaj przynajmniej jeden komponent w menu „Zarządzanie komponentami”.")
+        st.stop()
 
-# ---------- Formularz audytu ----------
-st.subheader("📝 Nowy audyt ISO 9001")
+    with st.form("audit_form"):
+        component = st.selectbox("Komponent audytowany", components)
+        auditor = st.text_input("Audytor")
+        date = st.date_input("Data audytu", value=datetime.date.today())
+        version = st.text_input("Wersja dokumentacji (np. ISO_2023_v2)")
+        st.markdown("---")
 
-if not components:
-    st.warning("Przed audytem musisz dodać komponent.")
-    st.stop()
+        questions = [
+            "Czy zdefiniowano i udokumentowano role oraz odpowiedzialności dla komponentu?",
+            "Czy komponent przeszedł zatwierdzoną procedurę oceny jakości dostawcy?",
+            "Czy dokumentacja komponentu jest aktualna i została zatwierdzona?",
+            "Czy komponent podlegał przeglądowi technicznemu/zarządczemu?",
+            "Czy przechowywane są archiwalne wyniki wcześniejszych audytów komponentu?"
+        ]
 
-selected_component = st.selectbox("📦 Wybierz komponent do audytu", components)
+        results = []
+        for i, q in enumerate(questions, start=1):
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.markdown(f"**{i}. {q}**")
+            with col2:
+                result = st.radio(f"Wynik {i}", ["Tak", "Nie", "N/A"], key=f"q{i}")
+                comment = st.text_input(f"Komentarz {i}", key=f"c{i}")
+            results.append((q, result, comment))
 
-questions = [
-    "Czy określono role, obowiązki i uprawnienia związane z jakością w procesach lotniczych?",
-    "Czy dostawcy są zatwierdzeni zgodnie z wymaganiami branży lotniczej (np. wg ASL)?",
-    "Czy dokumentacja techniczna i zapisy są nadzorowane i zaktualizowane zgodnie z wymaganiami klienta?",
-    "Czy przeprowadzono okresowy przegląd zarządzania z uwzględnieniem ryzyk dla bezpieczeństwa lotniczego?",
-    "Czy utrzymywana jest identyfikowalność części i materiałów na wszystkich etapach produkcji?",
-    "Czy wdrożono działania zapobiegawcze dla niezgodności o krytycznym znaczeniu?",
-    "Czy dane z poprzednich audytów i incydentów są wykorzystywane do doskonalenia systemu?",
-    "Czy przechowywane są dowody spełnienia wymagań klientów i nadzoru nad zmianami projektowymi?"
-]
+        submitted = st.form_submit_button("✅ Zakończ audyt i zapisz")
 
+    if submitted:
+        records = []
+        for q, res, com in results:
+            records.append({
+                "component": component,
+                "auditor": auditor,
+                "date": date.strftime("%Y-%m-%d"),
+                "user": st.session_state["user"]["email"],
+                "question": q,
+                "result": res,
+                "comment": com,
+                "version": version
+            })
+        new_df = pd.DataFrame(records)
+        if audit_file.exists():
+            existing = pd.read_csv(audit_file)
+            full_df = pd.concat([existing, new_df], ignore_index=True)
+        else:
+            full_df = new_df
+        full_df.to_csv(audit_file, index=False)
+        st.success("✅ Audyt zapisany!")
 
-audit_file = Path("audits.csv")
+# ---------- Widok: Zarządzanie komponentami ----------
+elif menu == "🧩 Zarządzanie komponentami":
+    st.subheader("🧩 Lista komponentów")
+    if components:
+        st.write("Obecne komponenty:")
+        st.write(components)
 
-with st.form("audit_form"):
-    auditor = st.text_input("Audytor")
-    date = st.date_input("Data audytu", value=datetime.date.today())
-    version = st.text_input("Wersja dokumentacji (np. ISO_2023_v2)")
+    with st.form("add_component"):
+        new_comp = st.text_input("Dodaj nowy komponent")
+        if st.form_submit_button("➕ Dodaj"):
+            if new_comp and new_comp not in components:
+                components.append(new_comp)
+                save_components(components)
+                st.success(f"✅ Dodano: {new_comp}")
+            else:
+                st.warning("⚠️ Komponent już istnieje lub jest pusty.")
 
     st.markdown("---")
-    results = []
-    for i, q in enumerate(questions, start=1):
-        col1, col2 = st.columns([3, 2])
-        with col1:
-            st.markdown(f"**{i}. {q}**")
-        with col2:
-            result = st.radio(f"Wynik {i}", ["Tak", "Nie", "N/A"], key=f"q{i}")
-            comment = st.text_input(f"Komentarz {i}", key=f"c{i}")
-        results.append((q, result, comment))
+    with st.form("delete_component"):
+        to_delete = st.selectbox("Usuń komponent", components)
+        if st.form_submit_button("🗑 Usuń"):
+            components.remove(to_delete)
+            save_components(components)
+            st.success(f"❌ Usunięto: {to_delete}")
 
-    submitted = st.form_submit_button("✅ Zakończ audyt i zapisz")
+# ---------- Widok: Historia audytów ----------
+elif menu == "📂 Historia audytów":
+    st.subheader("📂 Przegląd zapisanych audytów")
 
-if submitted:
-    records = []
-    for q, res, com in results:
-        records.append({
-            "auditor": auditor,
-            "date": date.strftime("%Y-%m-%d"),
-            "user": st.session_state["user"]["email"],
-            "component": selected_component,
-            "question": q,
-            "result": res,
-            "comment": com,
-            "version": version
-        })
-    new_df = pd.DataFrame(records)
     if audit_file.exists():
-        existing = pd.read_csv(audit_file)
-        full_df = pd.concat([existing, new_df], ignore_index=True)
+        df = pd.read_csv(audit_file)
+        if not df.empty:
+            selected_component = st.selectbox("Filtruj po komponencie", options=["-- wszystkie --"] + sorted(df["component"].unique()))
+            if selected_component != "-- wszystkie --":
+                df = df[df["component"] == selected_component]
+
+            st.dataframe(df, use_container_width=True)
+            st.markdown(f"Wyświetlono **{len(df)}** wpisów.")
+            st.download_button("📥 Eksportuj jako CSV", data=df.to_csv(index=False).encode("utf-8"), file_name="audits_export.csv", mime="text/csv")
+        else:
+            st.info("Brak danych audytowych.")
     else:
-        full_df = new_df
-    full_df.to_csv(audit_file, index=False)
-    st.success("✅ Audyt zapisany!")
+        st.info("Nie znaleziono pliku `audits.csv`.")
