@@ -53,7 +53,11 @@ component_file = Path("components.json")
 audit_file = Path("audits.csv")
 
 # ---------- Nawigacja ----------
-menu = st.sidebar.radio("📁 Wybierz widok", ["➕ Nowy audyt", "🧩 Zarządzanie komponentami", "📂 Historia audytów"])
+menu = st.sidebar.radio("📁 Wybierz widok", ["➕ Nowy audyt"
+                                             , "🧩 Zarządzanie komponentami"
+                                             , "📂 Historia audytów"
+                                             , "📜 Certyfikaty"
+                                             , "🚚 Audyty dostawców"])
 
 # ---------- Komponenty ----------
 def load_components():
@@ -166,3 +170,78 @@ elif menu == "📂 Historia audytów":
             st.info("Brak danych audytowych.")
     else:
         st.info("Nie znaleziono pliku `audits.csv`.")
+
+
+cert_file = Path("certificates.json")
+
+def load_certs():
+    if cert_file.exists():
+        return json.loads(cert_file.read_text())
+    return []
+
+def save_certs(data):
+    cert_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+if menu == "📜 Certyfikaty":
+    st.subheader("📜 Rejestr certyfikatów ISO")
+    certs = load_certs()
+
+    with st.form("add_cert"):
+        name = st.text_input("Nazwa certyfikatu")
+        cert_type = st.selectbox("Typ certyfikatu", ["ISO 9001", "AS9100", "ISO 14001"])
+        issue_date = st.date_input("Data wydania")
+        expiry_date = st.date_input("Data ważności")
+        if st.form_submit_button("➕ Dodaj certyfikat"):
+            certs.append({
+                "name": name,
+                "type": cert_type,
+                "issued": str(issue_date),
+                "expires": str(expiry_date)
+            })
+            save_certs(certs)
+            st.success("✅ Dodano certyfikat!")
+
+    if certs:
+        cert_df = pd.DataFrame(certs)
+        cert_df["expires"] = pd.to_datetime(cert_df["expires"])
+        today = pd.Timestamp.today()
+        cert_df["🔔 Status"] = cert_df["expires"].apply(lambda d: "⚠️ Wygasa" if d <= today + pd.Timedelta(days=30) else "✅ OK")
+        st.dataframe(cert_df)
+
+
+supplier_file = Path("suppliers.csv")
+
+if menu == "🚚 Audyty dostawców":
+    st.subheader("🚚 Audyt dostawcy")
+
+    with st.form("supplier_audit"):
+        supplier = st.text_input("Nazwa dostawcy")
+        evaluated_by = st.text_input("Audytor")
+        eval_date = st.date_input("Data audytu")
+        quality = st.selectbox("Jakość dostarczanych komponentów", ["Wysoka", "Średnia", "Niska"])
+        delivery = st.selectbox("Terminowość dostaw", ["Zawsze na czas", "Czasami opóźnienia", "Częste opóźnienia"])
+        doc = st.selectbox("Zgodność dokumentacji", ["Pełna", "Braki", "Nieprawidłowości"])
+        comments = st.text_area("Uwagi")
+        submit_supplier = st.form_submit_button("✅ Zapisz ocenę")
+
+    if submit_supplier:
+        new_supp = pd.DataFrame([{
+            "Dostawca": supplier,
+            "Audytor": evaluated_by,
+            "Data": eval_date.strftime("%Y-%m-%d"),
+            "Jakość": quality,
+            "Dostawy": delivery,
+            "Dokumentacja": doc,
+            "Komentarze": comments
+        }])
+        if supplier_file.exists():
+            old_supp = pd.read_csv(supplier_file)
+            supp_df = pd.concat([old_supp, new_supp], ignore_index=True)
+        else:
+            supp_df = new_supp
+        supp_df.to_csv(supplier_file, index=False)
+        st.success("✅ Zapisano audyt dostawcy!")
+
+    if supplier_file.exists():
+        df_supp = pd.read_csv(supplier_file)
+        st.dataframe(df_supp)
